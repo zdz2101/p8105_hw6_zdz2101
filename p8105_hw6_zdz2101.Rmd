@@ -12,6 +12,8 @@ library(purrr)
 library(knitr)
 library(broom)
 library(ggthemes)
+library(modelr)
+library(mgcv)
 ```
 
 #Problem 1
@@ -64,8 +66,77 @@ cities_odds %>%
   geom_hline(yintercept = 1) +
   ylab("Odds Ratio of Solved Homcides") + 
   xlab("City, State") + 
-  ggtitle("Comparing Solved Homicides of Whites vs Non-whites") +
+  ggtitle("Comparing Solved Homicides of Whites(ref) vs Non-whites") +
   theme_few()
 ```
 
+Just from an initial look at the plot, it seems that nonwhites generally have lower adds at having solved homicide cases; this is true for a large majority of American cities. Only 3 cities have odds higher than 1, meaning non whites have higher odds, those cities being Durham, NC, Birmingham, AL, and Tampa, FL. I added a reference line at 1 to indicate whether or not the confidence interval contains 1, the findings are insignificant(at alpha = 0.05 level) and it seems about half, maybe a little less do seem to overlap.
+
+Interestingly Boston is ranked all the way at the bottom here having the lowest odds and one of the narrowest CI bands. I would say this is a sign/indication there might be some discrimination going on that could warrant further investigation. I mention Boston because as a huge baseball fan I remember two scandals that happened at Fenway park just last year: a racial slur being called out to a player on the field and a big banner that was unrolled onto the wall of the stadium that said "Racism is as American as Baseball". Findings like this do not reflect well on a city that may already have a questionable history with racism. 
+
 #Problem 2
+```{r}
+birthweight_df <- read_csv("birthweight.csv")
+colSums(is.na(birthweight_df)) ##-- missing data is not an issue
+
+#check for NAs
+apply(birthweight_df[,-c(7,13)], 2, summary)
+```
+So missing data isn't an issue but it seems pnumlbw and pnumgsa provide no helpful information because the columns are just filled with zeroes. We need to convert the race variable into factor and remove these meaningless columns out of our dataset.
+
+```{r}
+#clean certain variables -- everything is truly numeric/integer except race variables
+birthweight_df <- birthweight_df %>%
+  mutate(frace = factor(frace),
+         mrace = factor(mrace)) %>%
+  select(-c("pnumlbw", "pnumsga"))
+
+
+all_variable_fit <- lm(bwt ~ ., data = birthweight_df)
+a <- step(all_variable_fit, direction = "backward")
+
+suggested_model <- lm(bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = birthweight_df)
+summary(suggested_model)
+
+birthweight_df <- birthweight_df %>% 
+  add_predictions(suggested_model) %>%
+  add_residuals(suggested_model)
+
+birthweight_df %>%
+  ggplot(., aes(x = pred, y = resid)) +
+  geom_point() + 
+  theme_bw() +
+  xlab("Predicted Values") + 
+  ylab("Residual Values") + 
+  ggtitle("Residuals vs Fitted Values")
+
+plot(suggested_model) #model diagnostics look good
+
+cv_df <- crossv_mc(birthweight_df, 100) %>%
+  mutate(train = map(train, as_tibble),
+         test  = map(test, as_tibble),
+         my_mod     = map(train, ~lm(bwt ~ babysex + bhead + blength + delwt +
+                                           fincome + gaweeks + mheight + mrace + 
+                                           parity + ppwt + smoken, data = .x)),
+         comp_lm1 = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+         comp_lm2 = map(train, ~lm(bwt ~ bhead + blength + babysex +
+                                         bhead*blength + bhead*babysex +
+                                         blength*babysex + bhead*blength*babysex, data = .x)),
+         rmse_mymod    = map2_dbl(my_mod, test, ~rmse(model = .x, data = .y)),
+         rmse_comp_lm1 = map2_dbl(comp_lm1, test, ~rmse(model = .x, data = .y)),
+         rmse_comp_lm2 = map2_dbl(comp_lm2, test, ~rmse(model = .x, data = .y)))
+
+cv_df %>%
+  select(starts_with("rmse")) %>% 
+  gather(key = model, value = rmse) %>% 
+  mutate(model = str_replace(model, "rmse_", ""),
+         model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+I chose to use an "automatic" process, using step-wise regression with backward elimation. We just learned how to do this in Biostats Methods 1 over the past week or so. The end product was a model using 11 variables for prediction: babysex, bhead, blength, delwt, fincome, gaweeks,mheight, mrace, parity, ppwt, and smoken. 
+
+The hope for a residuals vs fitted values plot is to look random for all values centered around a 0 residual. I would say this is the case for **most** of the data. There does seem to be some weirdness for the plot for anything <2000 on the predicted value; our model is quite off and seems to really overestimate for what turns out to be smaller babies. 
+
+Otherwise, the rest of our model diagnostics look decent, the extreme tail ends of the QQ plot don't quite align well but that is somewhat to be expected (model doesn't do well in extremes). And there are no extremely worrysome leverage/outlier points. 
+
+I recreated the rmse violin plot done in class with my model and the two proposed models. I would say based on rmse, my model from the stepwise regression generally performs the best but in terms of interpretation the second model with all the interaction effects is easiest to explain. The two predictor model is clearly the poorest. I fear my model may have been an overfit. 
