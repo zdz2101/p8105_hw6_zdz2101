@@ -1,0 +1,71 @@
+---
+title: "p8105_hw6_zdz2101"
+author: "Zelos Zhu"
+date: "11/26/2018"
+output: github_document
+---
+
+#Load packages
+```{r, message = FALSE}
+library(tidyverse)
+library(purrr)
+library(knitr)
+library(broom)
+library(ggthemes)
+```
+
+#Problem 1
+```{r}
+homicide_df <- read_csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv")
+homicide_df <- homicide_df %>%
+  mutate(city_state = str_c(city, ", ", state),
+         homicide_status = ifelse(disposition == "Closed by arrest", 1, 0),
+         victim_age = as.numeric(victim_age),
+         victim_race_recoded = as.factor(ifelse(victim_race == "White", "white", "non-white")),
+         victim_race_recoded = relevel(victim_race_recoded, "white")) %>%
+  filter(!city_state %in% c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO"))
+
+#Logistic model for Baltimore
+homicide_df %>%
+  filter(city_state == "Baltimore, MD") %>%
+  glm(homicide_status ~ victim_age + victim_sex + victim_race_recoded, family = binomial(), data = .) %>%
+  tidy() %>%
+  filter(term == "victim_race_recodednon-white") %>%
+  mutate(estimate_exp = exp(estimate),
+         lower_bound_CI = exp(estimate - 1.96*std.error),
+         upper_bound_CI = exp(estimate + 1.96*std.error)) %>%
+  select(estimate_exp, lower_bound_CI, upper_bound_CI)
+
+
+#doing it for all cities
+cities_odds <- homicide_df %>% 
+  group_by(city_state) %>% 
+  nest() %>% 
+  mutate(models = map(data, ~glm(homicide_status ~ victim_age + victim_sex + victim_race_recoded, family = binomial(), data = .x)),
+         models = map(models, broom::tidy)) %>%
+  select(-data) %>%
+  unnest() %>%
+  filter(term == "victim_race_recodednon-white") %>%
+  mutate(estimate_exp = exp(estimate),
+         lower_bound_CI = exp(estimate - 1.96*std.error),
+         upper_bound_CI = exp(estimate + 1.96*std.error)) %>%
+  select(city_state, estimate_exp, lower_bound_CI, upper_bound_CI)
+
+kable(cities_odds)
+
+cities_odds %>%
+  ungroup( )%>%
+  arrange(estimate_exp) %>%
+  mutate(city_state = factor(city_state, levels = city_state)) %>%
+  ggplot(aes(x = city_state, y = estimate_exp)) + 
+  geom_point() + 
+  geom_errorbar(aes(x = city_state, ymin = lower_bound_CI, ymax = upper_bound_CI), width=0.2, size=1, color="blue") + 
+  coord_flip() + 
+  geom_hline(yintercept = 1) +
+  ylab("Odds Ratio of Solved Homcides") + 
+  xlab("City, State") + 
+  ggtitle("Comparing Solved Homicides of Whites vs Non-whites") +
+  theme_few()
+```
+
+#Problem 2
