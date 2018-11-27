@@ -133,7 +133,7 @@ cv_df %>%
          model = fct_inorder(model)) %>% 
   ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
-I chose to use an "automatic" process, using step-wise regression with backward elimation. We just learned how to do this in Biostats Methods 1 over the past week or so. The end product was a model using 11 variables for prediction: babysex, bhead, blength, delwt, fincome, gaweeks,mheight, mrace, parity, ppwt, and smoken. 
+I chose to use an "automatic" process, using step-wise regression with backward elimation based on AIC. We just learned how to do this in Biostats Methods 1 over the past week or so. The end product was a model using 11 variables for prediction: babysex, bhead, blength, delwt, fincome, gaweeks,mheight, mrace, parity, ppwt, and smoken. 
 
 The hope for a residuals vs fitted values plot is to look random for all values centered around a 0 residual. I would say this is the case for **most** of the data. There does seem to be some weirdness for the plot for anything <2000 on the predicted value; our model is quite off and seems to really overestimate for what turns out to be smaller babies. 
 
