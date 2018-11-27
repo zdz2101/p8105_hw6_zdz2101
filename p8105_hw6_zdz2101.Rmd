@@ -80,9 +80,9 @@ birthweight_df <- read_csv("birthweight.csv")
 colSums(is.na(birthweight_df)) ##-- missing data is not an issue
 
 #check for NAs
-apply(birthweight_df[,-c(7,13)], 2, summary)
+apply(birthweight_df, 2, summary)
 ```
-So missing data isn't an issue but it seems pnumlbw and pnumgsa provide no helpful information because the columns are just filled with zeroes. We need to convert the race variable into factor and remove these meaningless columns out of our dataset.
+So missing data isn't an issue but it seems pnumlbw and pnumgsa provide no helpful information because the columns are just filled with zeroes. Alos need to make sure we convert the race variables, mrace & frace, into factor and remove the meaningless columns out of our dataset.
 
 ```{r}
 #clean certain variables -- everything is truly numeric/integer except race variables
